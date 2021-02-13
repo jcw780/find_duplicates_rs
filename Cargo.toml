@@ -1,0 +1,12 @@
+[package]
+name = "find_duplicates"
+version = "0.1.0"
+authors = ["jcw780 <30562395+jcw780@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+blake2 = "0.9"
+hex = "0.3"
+structopt = "0.3"
