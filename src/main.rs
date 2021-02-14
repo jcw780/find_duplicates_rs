@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs; 
-use std::io::Read;
+use std::io::{stdin, stdout, Read};
+use std::io::prelude::*;
 use std::path::PathBuf;
 
+use base64::encode;
 use blake2::{Blake2b, Digest};
-use hex;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -14,14 +15,34 @@ struct Opt{
     target_dir: PathBuf,
 }
 
+#[cfg(target_os = "windows")]
+fn long_path(path: &PathBuf) -> String{
+    #[cfg(target_os = "windows")]
+    format!("\\\\?\\{}", path.display())
+    // Windows has a 260 character path limit 
+    // by default, this overrides it
+}
+
+#[cfg(not(target_os = "windows"))]
+fn long_path(path: &PathBuf) -> String{
+    path.display()
+} 
+
+fn files_in_dir(target_dir: &PathBuf) -> Vec<PathBuf> {
+    let paths = fs::read_dir(target_dir).unwrap();
+    paths.map(|path| path.unwrap().path())
+        .filter(|path| fs::metadata(path).map_or(false, |v| v.is_file()))
+        .collect()
+}
+
+fn move_file(src: &PathBuf, dest: &PathBuf){
+    fs::rename(long_path(src), long_path(dest)).expect("Failed to move");
+}
+
 fn main() {
     let opt = Opt::from_args();
-    let paths = fs::read_dir(&opt.target_dir).unwrap();
+    let files = files_in_dir(&opt.target_dir);
     let mut file_hashes = HashMap::<Vec<u8>, Vec<PathBuf>>::new();
-
-    let files: Vec<PathBuf> = paths.map(|path| path.unwrap().path())
-        .filter(|path| fs::metadata(path).map_or(false, |v| v.is_file()))
-        .collect();
     
     println!("Found {} Files", files.len());
     files.iter().for_each(|file| {
@@ -49,13 +70,21 @@ fn main() {
             Err(e) => println!("Failed to open file: {}\nError: {}", file.display(), e)
         }
     });
+    let duplicate_folder = {
+        let mut temp = opt.target_dir.clone();
+        temp.push("duplicates"); temp
+    };
 
-    println!("Duplicates: ");
+    let mut folders: Vec<PathBuf> = vec![];
     file_hashes.iter().for_each(|(hash, files)| {
         if files.len() > 1{
-            let hash_hex = hex::encode(hash);
-            let duplicate_dir = format!("{}/duplicates/{}", &opt.target_dir.display(), hash_hex);
-            fs::create_dir_all(&duplicate_dir).expect_err("Failed to create folder");
+            let hash_b64 = encode(hash).replace("/", "_").replace("+", "-");
+            let hash_dir = {
+                let mut temp = duplicate_folder.clone();
+                temp.push(&hash_b64); temp
+            };
+            fs::create_dir_all(&hash_dir).expect("Failed to create folder");
+            folders.push(hash_dir.clone());
             let file_names: Vec<(PathBuf, String)> = files.iter()
                 .map(|file| {
                     file.file_name().map_or((file.clone(), "".to_string()), |name_os| {
@@ -64,16 +93,58 @@ fn main() {
                         })
                     })
                 }).collect();
-            println!("Hash: {}", hash_hex);
+            println!("Hash: {}", hash_b64);
             file_names.iter().for_each(|file| {
+                let file_dest = {
+                   let mut temp = hash_dir.clone();
+                   temp.push(&file.1); temp
+                }; 
+                move_file(&file.0, &file_dest);
                 println!("Moved: {}", &file.1);
-                match fs::copy(&file.0, format!("{}/{}", &duplicate_dir, &file.1)){
-                    Ok(_r) => (), Err(e) => println!("Failed to copy {} to folder\nError: {}", &file.1, e),
-                }
-                match fs::remove_file(&file.0){
-                    Ok(_r) => (), Err(e) => println!("Failed to remove {}\nError: {}", &file.1, e),
-                }
             });
         }
     });
+
+    if folders.len() > 0{
+        while {
+            let mut stdout = stdout();
+            write!(stdout, "Remove unwanted duplicates then press any key to continue...").unwrap();
+            stdout.flush().unwrap();
+            let mut stdin = stdin();
+            let _ = stdin.read(&mut [0u8]).unwrap();
+    
+            let mut folders_to_remove: HashSet<PathBuf> = HashSet::new();
+            folders.iter().for_each(
+                |folder| {
+                    let remaining_files = files_in_dir(folder);
+                    println!("{}", folder.display());
+                    println!("{}", remaining_files.len());
+    
+                    if remaining_files.len() < 2 {
+                        remaining_files.iter().for_each(|file| {
+                            let dest = {
+                                let mut temp = opt.target_dir.clone();
+                                temp.push(file.file_name().unwrap());
+                                temp
+                            };
+                            move_file(file, &dest);
+                        });
+                        folders_to_remove.insert(folder.clone());
+                    }
+                }
+            );
+    
+            folders_to_remove.iter().for_each(
+                |folder| {
+                    fs::remove_dir_all(long_path(folder))
+                        .expect(format!("Failed to remove folder: {}", folder.display()));
+                }
+            );
+    
+            folders.retain(|folder| !(folders_to_remove.contains(folder)));
+            folders.len() > 0 //Do while loop
+        }{}
+        fs::remove_dir_all(duplicate_folder)
+            .expect(format!("Failed to remove folder: {}", duplicate_folder.display()));
+    }
 }
