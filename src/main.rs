@@ -28,7 +28,7 @@ fn long_path(path: &PathBuf) -> String{
     path.display()
 } 
 
-fn files_in_dir(target_dir: &PathBuf) -> Vec<PathBuf> {
+fn get_files_in_dir(target_dir: &PathBuf) -> Vec<PathBuf> {
     let paths = fs::read_dir(target_dir).unwrap();
     paths.map(|path| path.unwrap().path())
         .filter(|path| fs::metadata(path).map_or(false, |v| v.is_file()))
@@ -41,7 +41,7 @@ fn move_file(src: &PathBuf, dest: &PathBuf){
 
 fn main() {
     let opt = Opt::from_args();
-    let files = files_in_dir(&opt.target_dir);
+    let files = get_files_in_dir(&opt.target_dir);
     let mut file_hashes = HashMap::<Vec<u8>, Vec<PathBuf>>::new();
     
     println!("Found {} Files", files.len());
@@ -120,7 +120,7 @@ fn main() {
             let mut folders_to_remove: HashSet<PathBuf> = HashSet::new();
             folders.iter().for_each(
                 |folder| {
-                    let remaining_files = files_in_dir(folder);
+                    let remaining_files = get_files_in_dir(folder);
                     println!("{}", folder.display());
                     println!("{}", remaining_files.len());
     
