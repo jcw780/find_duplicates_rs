@@ -46,29 +46,33 @@ fn main() {
     
     println!("Found {} Files", files.len());
     files.iter().for_each(|file| {
-        match fs::File::open(file){
-            Ok(mut file_input) => {
+        fs::File::open(file).map_or_else(
+            |e| println!("Failed to open file: {}\nError: {}", file.display(), e),
+            |mut file_input| {
                 let mut buffer = [0u8; 32768];
                 let mut hasher = Blake2b::new();
-                loop {
-                    match file_input.read(&mut buffer){
-                        Ok(n) => {
-                            if n == 0 {break}
-                            hasher.update(buffer);
-                        },
-                        Err(e) => {
+                let mut read_success = true;
+                while {
+                    file_input.read(&mut buffer).map_or_else(
+                        |e| {
                             println!("Buffered Read of {} Failed\nError: {}", file.display(), e);
-                            break;
+                            read_success = false;
+                            false
+                        },
+                        |n| {
+                            hasher.update(buffer);
+                            n != 0
                         }
-                    }
-                } 
-                let hash: Vec<u8> = hasher.finalize().to_vec();
-                file_hashes.entry(hash)
-                    .and_modify(|v| {v.push(file.clone());})
-                    .or_insert(vec![file.clone()]);
+                    )
+                }{};
+                if read_success{                
+                    let hash: Vec<u8> = hasher.finalize().to_vec();
+                    file_hashes.entry(hash)
+                        .and_modify(|v| {v.push(file.clone());})
+                        .or_insert(vec![file.clone()]);
+                }
             },
-            Err(e) => println!("Failed to open file: {}\nError: {}", file.display(), e)
-        }
+        );
     });
     let duplicate_folder = {
         let mut temp = opt.target_dir.clone();
@@ -137,7 +141,7 @@ fn main() {
             folders_to_remove.iter().for_each(
                 |folder| {
                     fs::remove_dir_all(long_path(folder))
-                        .expect(format!("Failed to remove folder: {}", folder.display()));
+                        .expect("Failed to remove folder");
                 }
             );
     
@@ -145,6 +149,6 @@ fn main() {
             folders.len() > 0 //Do while loop
         }{}
         fs::remove_dir_all(duplicate_folder)
-            .expect(format!("Failed to remove folder: {}", duplicate_folder.display()));
+            .expect("Failed to remove folder");
     }
 }
