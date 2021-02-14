@@ -133,10 +133,6 @@ fn main() {
                 stdout.write_all(b"Incorrect Control Key\n").unwrap();
                 stdout.flush().unwrap();
             }
-<<<<<<< HEAD
-=======
-
->>>>>>> 9927d073ca9c3477621ea664cd4c5b534edb6f00
             
             if refresh {
                 let mut folders_to_remove: HashSet<PathBuf> = HashSet::new();
