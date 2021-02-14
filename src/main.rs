@@ -91,11 +91,11 @@ fn main() {
             folders.push(hash_dir.clone());
             let file_names: Vec<(PathBuf, String)> = files.iter()
                 .map(|file| {
-                    file.file_name().map_or((file.clone(), "".to_string()), |name_os| {
-                        name_os.to_str().map_or((file.clone(), "".to_string()), |name| {
-                            (file.clone(), name.to_string())
-                        })
-                    })
+                    (
+                        file.clone(), 
+                        file.file_name().expect("Path is not a proper file name")
+                            .to_str().expect("Path is not valid in UTF-8").to_string()
+                    )
                 }).collect();
             println!("Hash: {}", hash_b64);
             file_names.iter().for_each(|file| {
