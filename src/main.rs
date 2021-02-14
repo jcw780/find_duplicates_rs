@@ -8,6 +8,8 @@ use base64::encode;
 use blake3::{Hasher};
 use structopt::StructOpt;
 
+mod file_utilities;
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "find duplicates", about = "find duplicates.")]
 struct Opt{
@@ -16,29 +18,6 @@ struct Opt{
 
     #[structopt(short = "d", long = "duplicate", default_value ="duplicates")]
     duplicate_dir: PathBuf,
-}
-
-#[cfg(target_os = "windows")]
-fn long_path(path: &PathBuf) -> String{
-    format!("\\\\?\\{}", path.display())
-    // Windows has a 260 character path limit 
-    // by default, this overrides it
-}
-
-#[cfg(not(target_os = "windows"))]
-fn long_path(path: &PathBuf) -> String{
-    path.display()
-} 
-
-fn get_files_in_dir(target_dir: &PathBuf) -> Vec<PathBuf> {
-    let paths = fs::read_dir(target_dir).unwrap();
-    paths.map(|path| path.unwrap().path())
-        .filter(|path| fs::metadata(path).map_or(false, |v| v.is_file()))
-        .collect()
-}
-
-fn move_file(src: &PathBuf, dest: &PathBuf){
-    fs::rename(long_path(src), long_path(dest)).expect("Failed to move");
 }
 
 fn loop_till_valid_key<F>(prompt: &[u8], mut key_check: F) where F: FnMut(&str) -> bool{
@@ -62,7 +41,7 @@ fn loop_till_valid_key<F>(prompt: &[u8], mut key_check: F) where F: FnMut(&str) 
 }
 
 fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
-    let files = get_files_in_dir(&opt.target_dir);
+    let files = file_utilities::get_files_in_dir(&opt.target_dir);
     let mut file_hashes = HashMap::<[u8; 32], Vec<PathBuf>>::new();
     
     println!("Found {} Files", files.len());
@@ -120,7 +99,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
                    let mut temp = hash_dir.clone();
                    temp.push(&file.1); temp
                 }; 
-                move_file(&file.0, &file_dest);
+                file_utilities::move_file(&file.0, &file_dest);
                 println!("Moved: {}", &file.1);
             });
         }
@@ -133,7 +112,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
                 temp.push(file.file_name().unwrap());
                 temp
             };
-            move_file(file, &dest);
+            file_utilities::move_file(file, &dest);
         });
     };
 
@@ -155,7 +134,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
                 let mut folders_to_remove: HashSet<PathBuf> = HashSet::new();
                 folders.iter().for_each(
                     |folder| {
-                        let remaining_files = get_files_in_dir(folder);
+                        let remaining_files = file_utilities::get_files_in_dir(folder);
                         println!("Folder: {}", folder.display());
                         println!("Files Remaining: {}", remaining_files.len());
         
@@ -168,7 +147,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
         
                 folders_to_remove.iter().for_each(
                     |folder| {
-                        fs::remove_dir_all(long_path(folder))
+                        fs::remove_dir_all(file_utilities::long_path(folder))
                             .expect("Failed to remove folder");
                     }
                 );
@@ -177,7 +156,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
             }else{
                 folders.iter().for_each(
                     |folder| {
-                        let remaining_files = get_files_in_dir(folder);
+                        let remaining_files = file_utilities::get_files_in_dir(folder);
                         move_remaining_files(remaining_files);
                     }
                 );
