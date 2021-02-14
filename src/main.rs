@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 
 use base64::encode;
-use blake2::{Blake2b, Digest};
+use blake3::{Hasher};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -42,7 +42,7 @@ fn move_file(src: &PathBuf, dest: &PathBuf){
 fn main() {
     let opt = Opt::from_args();
     let files = get_files_in_dir(&opt.target_dir);
-    let mut file_hashes = HashMap::<Vec<u8>, Vec<PathBuf>>::new();
+    let mut file_hashes = HashMap::<[u8; 32], Vec<PathBuf>>::new();
     
     println!("Found {} Files", files.len());
     files.iter().for_each(|file| {
@@ -50,7 +50,7 @@ fn main() {
             |e| println!("Failed to open file: {}\nError: {}", file.display(), e),
             |mut file_input| {
                 let mut buffer = [0u8; 32768];
-                let mut hasher = Blake2b::new();
+                let mut hasher = Hasher::new();
                 let mut read_success = true;
                 while {
                     file_input.read(&mut buffer).map_or_else(
@@ -60,13 +60,13 @@ fn main() {
                             false
                         },
                         |n| {
-                            hasher.update(buffer);
+                            hasher.update(&buffer);
                             n != 0
                         }
                     )
                 }{}; //Do while loop
                 if read_success{                
-                    let hash: Vec<u8> = hasher.finalize().to_vec();
+                    let hash: [u8; 32] = *hasher.finalize().as_bytes();
                     file_hashes.entry(hash)
                         .and_modify(|v| {v.push(file.clone());})
                         .or_insert(vec![file.clone()]);

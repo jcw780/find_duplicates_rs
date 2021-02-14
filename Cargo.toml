@@ -8,5 +8,5 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.13"
-blake2 = "0.9"
+blake3 = "0.3"
 structopt = "0.3"
