@@ -64,7 +64,7 @@ fn main() {
                             n != 0
                         }
                     )
-                }{};
+                }{}; //Do while loop
                 if read_success{                
                     let hash: Vec<u8> = hasher.finalize().to_vec();
                     file_hashes.entry(hash)
@@ -144,7 +144,6 @@ fn main() {
                         .expect("Failed to remove folder");
                 }
             );
-    
             folders.retain(|folder| !(folders_to_remove.contains(folder)));
             folders.len() > 0 //Do while loop
         }{}
