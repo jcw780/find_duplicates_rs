@@ -13,11 +13,13 @@ use structopt::StructOpt;
 struct Opt{
     #[structopt(parse(from_os_str))]
     target_dir: PathBuf,
+
+    #[structopt(short = "d", long = "duplicate", default_value ="duplicates")]
+    duplicate_dir: PathBuf,
 }
 
 #[cfg(target_os = "windows")]
 fn long_path(path: &PathBuf) -> String{
-    #[cfg(target_os = "windows")]
     format!("\\\\?\\{}", path.display())
     // Windows has a 260 character path limit 
     // by default, this overrides it
@@ -39,8 +41,27 @@ fn move_file(src: &PathBuf, dest: &PathBuf){
     fs::rename(long_path(src), long_path(dest)).expect("Failed to move");
 }
 
-fn main() {
-    let opt = Opt::from_args();
+fn loop_till_valid_key<F>(prompt: &[u8], mut key_check: F) where F: FnMut(&str) -> bool{
+    let mut stdout = stdout();
+    stdout.write_all(prompt).unwrap();
+    stdout.flush().unwrap();
+    while {
+        let mut buffer = String::new();
+        let stdin = stdin(); // We get `Stdin` here.
+        stdin.read_line(&mut buffer).map_or_else(|_| {
+                println!("Failed to read line");
+                true
+            }, |_| {
+                key_check(&buffer.to_ascii_lowercase().trim()[..])
+            }
+        )
+    }{
+        stdout.write_all(b"Incorrect Control Key\n").unwrap();
+        stdout.flush().unwrap();
+    }
+}
+
+fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
     let files = get_files_in_dir(&opt.target_dir);
     let mut file_hashes = HashMap::<[u8; 32], Vec<PathBuf>>::new();
     
@@ -74,10 +95,6 @@ fn main() {
             },
         );
     });
-    let duplicate_folder = {
-        let mut temp = opt.target_dir.clone();
-        temp.push("duplicates"); temp
-    };
 
     let mut folders: Vec<PathBuf> = vec![];
     file_hashes.iter().for_each(|(hash, files)| {
@@ -127,24 +144,13 @@ fn main() {
             stdout.flush().unwrap();
 
             let mut refresh = true;
-            while {
-                let mut buffer = String::new();
-                let stdin = stdin(); // We get `Stdin` here.
-                stdin.read_line(&mut buffer).map_or_else(|_| {
-                        println!("Failed to read line");
-                        true
-                    }, |_| {
-                    match &buffer.to_ascii_lowercase().trim()[..]{
-                        "r" => {refresh = true; false},
-                        "q" => {refresh = false; false},
-                        _ => true,
-                    }
-                })
-            }{
-                stdout.write_all(b"Incorrect Control Key\n").unwrap();
-                stdout.flush().unwrap();
-            }
-            
+            loop_till_valid_key(b"Controls:\nQ: Move remaining back to target_dir\nR: Refresh\n", |key: &str| {
+                match key{
+                    "r" => {refresh = true; false},
+                    "q" => {refresh = false; false},
+                    _ => true,
+                }
+            });            
             if refresh {
                 let mut folders_to_remove: HashSet<PathBuf> = HashSet::new();
                 folders.iter().for_each(
@@ -180,5 +186,30 @@ fn main() {
         }{} //Do while loop
         fs::remove_dir_all(duplicate_folder)
             .expect("Failed to remove folder");
+    }
+}
+
+fn main() {
+    let opt = Opt::from_args();
+    let duplicate_folder = {
+        let mut temp = opt.target_dir.clone();
+        temp.push(opt.duplicate_dir.clone()); temp
+    };
+
+    let mut run = true;
+    if duplicate_folder.exists() {
+        loop_till_valid_key(b"Duplicates directory exists, further operation may overwrite internal data\nProceed? Y/N\n", 
+            |key: &str|{
+                match key{
+                    "y" => {run = true; false},
+                    "n" => {run = false; false},
+                    _ => true,
+                }
+            }
+        );
+    }
+
+    if run {
+        find_move_duplicates(opt, duplicate_folder);
     }
 }
