@@ -40,11 +40,8 @@ fn loop_till_valid_key<F>(prompt: &[u8], mut key_check: F) where F: FnMut(&str) 
     }
 }
 
-fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
-    let files = file_utilities::get_files_in_dir(&opt.target_dir);
+fn group_file_paths_by_hash(files: &Vec<PathBuf>) -> HashMap<[u8; 32], Vec<PathBuf>>{
     let mut file_hashes = HashMap::<[u8; 32], Vec<PathBuf>>::new();
-    
-    println!("Found {} Files", files.len());
     files.iter().for_each(|file| {
         fs::File::open(file).map_or_else(
             |e| println!("Failed to open file: {}\nError: {}", file.display(), e),
@@ -74,7 +71,10 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
             },
         );
     });
+    file_hashes
+}
 
+fn view_move_duplicates(file_hashes: &HashMap<[u8; 32], Vec<PathBuf>>, target_dir: &PathBuf, duplicate_folder: &PathBuf){
     let mut folders: Vec<PathBuf> = vec![];
     file_hashes.iter().for_each(|(hash, files)| {
         if files.len() > 1{
@@ -108,7 +108,7 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
     let move_remaining_files = |remaining_files: Vec<PathBuf>|{
         remaining_files.iter().for_each(|file| {
             let dest = {
-                let mut temp = opt.target_dir.clone();
+                let mut temp = target_dir.clone();
                 temp.push(file.file_name().unwrap());
                 temp
             };
@@ -170,8 +170,9 @@ fn find_move_duplicates(opt: Opt, duplicate_folder: PathBuf){
 
 fn main() {
     let opt = Opt::from_args();
+    let target_dir = opt.target_dir;
     let duplicate_folder = {
-        let mut temp = opt.target_dir.clone();
+        let mut temp = target_dir.clone();
         temp.push(opt.duplicate_dir.clone()); temp
     };
 
@@ -189,6 +190,9 @@ fn main() {
     }
 
     if run {
-        find_move_duplicates(opt, duplicate_folder);
+        let files_in_target = file_utilities::get_files_in_dir(&target_dir);
+        println!("Found {} Files", files_in_target.len());
+        let file_hashes = group_file_paths_by_hash(&files_in_target);
+        view_move_duplicates(&file_hashes, &target_dir, &duplicate_folder);
     }
 }
