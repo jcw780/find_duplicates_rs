@@ -109,6 +109,17 @@ fn main() {
         }
     });
 
+    let move_remaining_files = |remaining_files: Vec<PathBuf>|{
+        remaining_files.iter().for_each(|file| {
+            let dest = {
+                let mut temp = opt.target_dir.clone();
+                temp.push(file.file_name().unwrap());
+                temp
+            };
+            move_file(file, &dest);
+        });
+    };
+
     if folders.len() > 0{
         while {
             let mut stdout = stdout();
@@ -143,14 +154,7 @@ fn main() {
                         println!("Files Remaining: {}", remaining_files.len());
         
                         if remaining_files.len() < 2 {
-                            remaining_files.iter().for_each(|file| {
-                                let dest = {
-                                    let mut temp = opt.target_dir.clone();
-                                    temp.push(file.file_name().unwrap());
-                                    temp
-                                };
-                                move_file(file, &dest);
-                            });
+                            move_remaining_files(remaining_files);
                             folders_to_remove.insert(folder.clone());
                         }
                     }
@@ -168,20 +172,12 @@ fn main() {
                 folders.iter().for_each(
                     |folder| {
                         let remaining_files = get_files_in_dir(folder);
-                        remaining_files.iter().for_each(|file| {
-                            let dest = {
-                                let mut temp = opt.target_dir.clone();
-                                temp.push(file.file_name().unwrap());
-                                temp
-                            };
-                            move_file(file, &dest);
-                        });
-                        
+                        move_remaining_files(remaining_files);
                     }
                 );
                 false
             }
-        }{}
+        }{} //Do while loop
         fs::remove_dir_all(duplicate_folder)
             .expect("Failed to remove folder");
     }
